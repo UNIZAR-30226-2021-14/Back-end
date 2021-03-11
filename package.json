@@ -1,5 +1,5 @@
 {
-  "name": "api-postgresql",
+  "name": "API-PostgreSQL",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "bcrypt": "^5.0.1",
+    "cryptr": "^6.0.2",
     "express": "^4.17.1",
     "fs": "^0.0.1-security",
     "https": "^1.0.0",

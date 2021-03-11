@@ -3,7 +3,7 @@ const {  Router } = require('express');
 const router = Router();
 
 //cojo la función de getUsers del fichero controllers.
-const { getUsers, addUser, removeUser, pruebilla, addpwtoUser, getPasswdsUser, verifyUser,userPairPassword} = 
+const { getUsers, addUser, removeUser, pruebilla, addpwtoUser, getPasswdsUser, verifyUser,detailsPasswd} = 
     require('../controllers/index_controllers_user');
 
 //dependiendo del tipo de peticion (get,post...) a la ruta dada, ejecutaré 
@@ -30,7 +30,7 @@ router.get('/passwdUser',getPasswdsUser)
 //verificar que el usuario está en BD
 router.get('/verify', verifyUser);
 
-//sacamos el par user-pw de un usuario X dado el nombre
-router.get('/userPairPassword',userPairPassword)
+//sacamos los detalles de una contraseña 
+router.get('/detailspasswd',detailsPasswd)
 
 module.exports = router;

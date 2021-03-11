@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+/*const crypto = require('crypto');
 const algorithm = 'aes-256-cbc';
 const secretKey = crypto.randomBytes(32); 
 const iv = crypto.randomBytes(16);
@@ -24,16 +24,35 @@ function decrypt (hash) {
 }
 
 // unas pruebecillas...
-/*
+
     var aux = encrypt("hola buenas!!")
-    console.log(aux.content);
+    console.log(aux);
 
-    var msjOriginal = decrypt(aux);
-    console.log(msjOriginal);
-*/
+   var aux = aux.iv + aux.content;
+   console.log(aux);
+
+   aux = aux.toString();
+
+   var ivvv = aux.substr(0, 32);
+   var contentttt = aux.substr(32,64);
+
+   console.log(ivvv+'\n'+contentttt);
+
+   ivvv = ivvv.toString('hex');
+   contentttt = contentttt.toString('hex');
+
+   var final = {
+       iv: ivvv,
+       content: contentttt
+    };
+
+    console.log(final);
+
+    console.log(decrypt(final))
 
 
-module.exports = {
+
+/*module.exports = {
     encrypt,
     decrypt
-}
+}*/

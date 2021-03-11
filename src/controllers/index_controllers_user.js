@@ -1,5 +1,8 @@
 const { json } = require('express');
 
+const Cryptr = require('cryptr');
+const cryptr = new Cryptr('ahsj174693=&%%$DGHSV');
+
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
 
@@ -19,7 +22,19 @@ const conexion = new Pool ({
 })
 
 const pruebilla = async (req,res) => {
-    res.send('Hello world\n');
+    //INSERTO contraseña y la intento descifrar
+    //cojo el nombre y la pw del JSON que me envían (del usuario que hay q meter en BD)
+    const {persona,pw } = req.body;
+    
+
+    //saco y descifro
+    const resp = await conexion.query('SELECT pw from prueba where persona=$1',[persona]);
+
+    console.log(resp.rows[0].pw);
+
+    var pwDesc = decrypt(resp.rows[0].pw);
+
+
 };
 
 //obtengo información de la BD.
@@ -64,19 +79,22 @@ const addUser = async (req,res) => {
 const removeUser = async (req,res) => {
     //me pasan el JSON del usuario, me quedo con su nombre (clave primaria)
     const nombre = req.body.nombre;
-    const password = req.body.password;
+
     //inserto en la el nombre y la pw del usuario que me han pasado
     const resp = await conexion.query('DELETE FROM usuarios WHERE nombre=$1', [nombre]);
-    //envío al cliente JSON con un msj y el user deleteado
-    res.json({
-        message: 'Usuario deleteado correctamente',
-        body: {
-            user: {nombre,password}
-        }
 
-    })
-    //saco por pantalla el resultado del DELETE
-    console.log(resp);
+    //si resp.rowCount es cero es que no ha deleteado ninguna row (el user no existe)
+    if (resp.rowCount==0) {
+        res.json({
+            message: 'Usuario no existe en BD'
+        })
+    }
+    else {
+    //envío al cliente JSON con un msj de ACK (ha ido ok)
+        res.json({
+            message: 'Usuario deleteado correctamente'
+        })
+    }
 
 };
 
@@ -99,16 +117,21 @@ const addpwtoUser = async (req,res) => {
     //se puede añadir
     if (aux.rows==0) {
         //ciframos la contraseña con un cifrado simétrico (para poderla recuperar luegoo)
-        var encrypted_passwd = encrypt(concretepasswd);
+        //var encrypted_passwd = encrypt(concretepasswd);
+        
+        //concateno el iv y el contenido y para almacenarlo en BD
+        //encrypted_passwd = encrypted_passwd.iv + encrypted_passwd.content; 
+
+        const encrypted_passwd = cryptr.encrypt(concretepasswd);
 
         //inserto en la BD el nombre y la pw del usuario que me han pasado
         const resp = 
         await conexion.query('INSERT INTO contrasenya (email,tipo,concreteuser,concretepasswd,dominio,fichero,categoria,fechacreacion,fechacaducidad,nombre) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', 
-            [usuarioPrincipal,tipo,concreteuser,encrypted_passwd.content,dominio,fichero,categoria,fechacreacion,fechacaducidad,nombre]);
+            [usuarioPrincipal,tipo,concreteuser,encrypted_passwd,dominio,fichero,categoria,fechacreacion,fechacaducidad,nombre]);
     
         //envío al cliente otro JSON, con un msj y el user creado.
         res.json({
-            message: 'Usuario introducido correctamente',
+            message: 'Contraseña introducida correctamente',
         })
         //saco por pantalla el resultado del INSERT
         console.log("contraseña añadida al usuario");
@@ -148,8 +171,8 @@ const verifyUser = async (req,res) => {
     //miro si el usuario está en bd y si está, obtengo su password (estará cifrada claro)
     const resp1 = await conexion.query('SELECT password from usuarios where nombre=$1',[nombre]);
 
-    //*** IGUAL HAY QUE PONER resp1==0 ***
-    if (resp1==[]) {
+    //si no has podido seleccionar ninguna row (no hay user con ese nombre)...
+    if (resp1.rowCount==0) {
         //el usuario ni está en bd porque no lo encuentro en bd
         res.json({
             message: 'Usuario no está en base de datos',
@@ -178,22 +201,63 @@ const verifyUser = async (req,res) => {
 
 };
 
-const userPairPassword = async (req,res) => {
-    //me pasan el usuario (de momento), luego con el JWT debería saber quién es
-    //les doy la info detallada (usuario,pw,fechas,categoria,dominios) 
-    const nombre = req.body.nombre;
-    const usuario = req.body.usuario;
+//saca los detalles de la contraseña en específico (par,fichero ó imagen)
+const detailsPasswd = async (req,res) => {
+    //me pasan el nombre de la contraseña del usuario
+    const {nombreUsuario, nombrePassword} = req.body;
+    //selecciono el tipo de contraseña que es
+    const resp1 = await conexion.query('SELECT tipo from contrasenya where (email=$1 and nombre=$2)',[nombreUsuario,nombrePassword]);
+    // ** COMPROBAR ANTES QUE TENGA UNA QUE SE LLAME ASÍ **
+    // if resp1.rowCount es 0 --> json: ERROR
+    //cogemos el tipo de contraseña que es
+    var tipo = resp1.rows[0].tipo;
+
+    switch(tipo) {
+        case "usuario-passwd":
+            //me quedo con los detalles que me interesan de este tipo de contraseña
+            const resp2 = await conexion.query('SELECT concreteuser,concretepasswd,dominio,categoria,fechacreacion,fechacaducidad from contrasenya where (email=$1 and nombre=$2)',[nombreUsuario,nombrePassword]);
+            //antes de enviar a front, debo descifrar la contraseña
+            var passCifrada = resp2.rows[0].concretepasswd;
+            console.log("PasswordCifrada : " + passCifrada);
+
+            //var auxIV = passCifrada.substr(0, 32);
+            //auxIV = auxIV.toString('hex');
+
+            //var auxC = passCifrada.substr(32, 64);
+            //auxC = auxC.toString('hex');            
+
+            //creamos el JSON para pasarselo al método decrypt con el iv y content (32 bits y 32 bits) que he cogido de la pass
+            //var passwordJson = {
+            //    iv: auxIV,
+            //    content: auxC
+            //};
+            //console.log("JSON: " + passwordJson.iv + ", " + passwordJson.content);
+            
+            //descifro la contraseña que he almacenado en BD
+            const plainTextPasswd = cryptr.decrypt(passCifrada);
+            //actualizo el campo de la passwd con lo que me ha salido y envío a front
+            var respuesta = {
+                concreteuser : resp2.rows[0].concreteuser,
+                concretpasswd : plainTextPasswd,
+                dominio : resp2.rows[0].dominio,
+                categoria : resp2.rows[0].categoria,
+                fechacreacion : resp2.rows[0].fechacreacion,
+                fechacaducidad : resp2.rows[0].fechacaducidad
+            };
+            //enviamos
+            res.send(respuesta);
+        break;
+        
+        case "fichero":
+            res.send("ficherito - no implementado aun");
+        break;
+
+        case "imagen":
+            res.send("imagen - no implementado aun");
+        break;
+
+    }
     
-    const resp = await conexion.query('SELECT concreteuser,concretepasswd,fechacreacion,fechacaducidad,categoria,dominio from contrasenya WHERE (nombre=$1 and email=$2)',
-    [nombre,usuario]);
-
-    var pwCifrada = resp.rows[0].concretepasswd;
-    //ahora hay que descifrarla y enviársela al front, no le vamos a enviar el hash jeje
-
-    console.log(pwCifrada);
-    res.status(200).json(resp.rows);
-
-
 };
 
 
@@ -211,5 +275,5 @@ module.exports = {
     addpwtoUser,
     getPasswdsUser,
     verifyUser,
-    userPairPassword
+    detailsPasswd
 }
