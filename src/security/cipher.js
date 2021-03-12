@@ -1,4 +1,5 @@
-/*const crypto = require('crypto');
+/*
+const crypto = require('crypto');
 const algorithm = 'aes-256-cbc';
 const secretKey = crypto.randomBytes(32); 
 const iv = crypto.randomBytes(16);
@@ -38,9 +39,6 @@ function decrypt (hash) {
 
    console.log(ivvv+'\n'+contentttt);
 
-   ivvv = ivvv.toString('hex');
-   contentttt = contentttt.toString('hex');
-
    var final = {
        iv: ivvv,
        content: contentttt
@@ -52,7 +50,8 @@ function decrypt (hash) {
 
 
 
-/*module.exports = {
+module.exports = {
     encrypt,
     decrypt
-}*/
+}
+*/

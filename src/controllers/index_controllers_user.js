@@ -1,8 +1,15 @@
+//propio servidor express para recibir peticiones
 const { json } = require('express');
+//autenticar usuarios a través de token
+const jwt = require('jsonwebtoken')
+//importamos variables de entorno
+const config = require('../../env/config')
 
+//cifra con aes-256-gcm
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr('ahsj174693=&%%$DGHSV');
 
+//para hashear las contraseñas maestras
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
 
@@ -15,26 +22,22 @@ const { Pool } = require('pg');
 
 //Pool de conexiones a la BD para poder conectarme a psoftBD y coger los datos
 const conexion = new Pool ({
-    host: 'localhost',
-    user: 'pablojordan',
+    host: config.HOST,
+    user: config.DB_USER,
     password: '',
-    database: 'psoftBD'
+    database: config.DB_NAME
 })
 
 const pruebilla = async (req,res) => {
-    //INSERTO contraseña y la intento descifrar
-    //cojo el nombre y la pw del JSON que me envían (del usuario que hay q meter en BD)
-    const {persona,pw } = req.body;
+    //pruebo situacion: usuario manda peticion con token.
+    //la funcion de middleware me validará el token.
+    //yo llegaré aquí sólo si es válido.
+    //Si ok -> imprimo por pantalla el nombre del usuario que me ha hecho la peti.
+
+    //en la funcion de middleware, he dejado en req.usuario el mail de la persona
+    //que me ha enviado el token. Lo cojo.
+    res.send(req.usuario);
     
-
-    //saco y descifro
-    const resp = await conexion.query('SELECT pw from prueba where persona=$1',[persona]);
-
-    console.log(resp.rows[0].pw);
-
-    var pwDesc = decrypt(resp.rows[0].pw);
-
-
 };
 
 //obtengo información de la BD.
@@ -45,13 +48,12 @@ const getUsers = async (req,res) => {
     console.log(usuarios.rows);
 };
 
-//guardo info en la BD
-//si me mandan un POST deberé guardar usuarios en BD (por ej: alguien se registra)
-//recojo el json que me pasen con el user y la pass y lo meto en bd
-//AQUÍ TENDRÍA QUE MANDARLE A FRONT EL JWT DEL USUARIO X
+
+//registro en BD. Aquí ya sé que el ususario no está en BD, lo tengo que añadir. 
+//Envío también el JWT al usuario para saber que es él en sucesivas comunicaciones.
 const addUser = async (req,res) => {
     //cojo el nombre y la pw del JSON que me envían (del usuario que hay q meter en BD)
-    const { nombre,password } = req.body;
+    const {nombre,password} = req.body;
     
     //hasheo la password del usuario
     let hash = bcrypt.hashSync(password, saltRounds);
@@ -59,18 +61,19 @@ const addUser = async (req,res) => {
     //inserto el usuario junto a su contraseña cifrada en la base de datos
     const resp = await conexion.query('INSERT INTO usuarios (nombre,password) VALUES ($1,$2)', [nombre,hash]);
     
+    //genero el token para el usuario, meto su nombre de user en el token y lo cifro con la clave.
+    const accessToken = jwt.sign({ username: nombre}, config.llave_token, {
+        expiresIn: 60 * 60 * 24 // expires in 24 hours
+    });
 
-    //envío al cliente otro JSON, con un msj y el user creado.
+    //envío al cliente otro JSON, con un msj y el token de autenticación.
     res.json({
         message: 'Usuario introducido correctamente',
-        body: {
-            userBefore: {nombre,password},
-            userAfter: {nombre, hash}
-        }
-
+        token: accessToken
     })
+    
     //saco por pantalla el resultado del INSERT
-    console.log(resp);
+    console.log("OK");
 
 };
 
@@ -175,7 +178,7 @@ const verifyUser = async (req,res) => {
     if (resp1.rowCount==0) {
         //el usuario ni está en bd porque no lo encuentro en bd
         res.json({
-            message: 'Usuario no está en base de datos',
+            message: 'User not in DB',
             codigo: '0'
         })
     }
@@ -185,14 +188,14 @@ const verifyUser = async (req,res) => {
         if (bcrypt.compareSync(password, resp1.rows[0].password)) {
             // Passwords match
             res.json({
-                message: 'Usuario + password correctas',
+                message: 'User OK',
                 codigo: '1'
             })
         } 
         else {
             // Passwords don't match
             res.json({
-                message: 'Password incorrecta',
+                message: 'Password NOT OK',
                 codigo: '0'
             })
         }
@@ -259,9 +262,6 @@ const detailsPasswd = async (req,res) => {
     }
     
 };
-
-
-
 
 
 

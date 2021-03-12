@@ -1,10 +1,7 @@
 const fs = require('fs');
 const https = require('https');
 const express = require('express');
-
-
-const PORT = 3003 
-
+const config = require('../env/config');
 const app = express();
 
 //defino los middlewares
@@ -25,6 +22,6 @@ app.use(require('./routes/index'));
 https.createServer({
     key: fs.readFileSync('my_cert.key'),
     cert: fs.readFileSync('my_cert.crt')
-  }, app).listen(PORT, function(){
-    console.log("My HTTPS server listening on port " + PORT + "...");
+  }, app).listen(config.PORT, function(){
+    console.log("My HTTPS server listening on port " + config.PORT + "...");
   });
