@@ -66,22 +66,22 @@ router.get('/prueba',rutasProtegidas,pruebilla);
 //get sirve para coger datos, coger usuarios. 
 router.get('/users',getUsers);
 
-//post es para guardar datos, guardar usuarios. 
+//si en el front hay registro -> petición a esta ruta !!! 
 router.post('/users',addUser);
 
 //delete es para eliminar datos
 router.delete('/users',removeUser);
 
 //almacenamos una contraseña para un usuario
-router.post('/passwd',addpwtoUser)
+router.post('/passwd',rutasProtegidas,addpwtoUser)
 
 //sacamos el nombre de todas las contraseñas asociadas a un usuario en concreto 
-router.get('/passwdUser',getPasswdsUser)
+router.get('/passwdUser',rutasProtegidas,getPasswdsUser)
 
-//verificar que el usuario está en BD
+//si en el front hay inicio de sesión -> petición a esta ruta !!!
 router.get('/verify', verifyUser);
 
 //sacamos los detalles de una contraseña 
-router.get('/detailspasswd',detailsPasswd)
+router.get('/detailspasswd',rutasProtegidas,detailsPasswd)
 
 module.exports = router;

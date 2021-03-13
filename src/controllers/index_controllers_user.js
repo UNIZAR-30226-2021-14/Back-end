@@ -54,26 +54,36 @@ const getUsers = async (req,res) => {
 const addUser = async (req,res) => {
     //cojo el nombre y la pw del JSON que me envían (del usuario que hay q meter en BD)
     const {nombre,password} = req.body;
-    
-    //hasheo la password del usuario
-    let hash = bcrypt.hashSync(password, saltRounds);
-    
-    //inserto el usuario junto a su contraseña cifrada en la base de datos
-    const resp = await conexion.query('INSERT INTO usuarios (nombre,password) VALUES ($1,$2)', [nombre,hash]);
-    
-    //genero el token para el usuario, meto su nombre de user en el token y lo cifro con la clave.
-    const accessToken = jwt.sign({ username: nombre}, config.llave_token, {
-        expiresIn: 60 * 60 * 24 // expires in 24 hours
-    });
 
-    //envío al cliente otro JSON, con un msj y el token de autenticación.
-    res.json({
-        message: 'Usuario introducido correctamente',
-        token: accessToken
-    })
+    //comprobamos que no esté en BD ya
+    const resp1 = await conexion.query('SELECT * from usuarios where nombre=$1',[nombre]);
     
-    //saco por pantalla el resultado del INSERT
-    console.log("OK");
+    if (resp1.rowCount>0) {
+        //ya hay un usuario en BD con ese nombre
+        res.status(404).json({
+            message: 'User already exists',
+            codigo: '0'
+        })
+    }
+    else {
+        //el usuario no está en BD -> lo añado
+        //hasheo la password del usuario
+        let hash = bcrypt.hashSync(password, saltRounds);
+        
+        //inserto el usuario junto a su contraseña cifrada en la base de datos
+        const resp = await conexion.query('INSERT INTO usuarios (nombre,password) VALUES ($1,$2)', [nombre,hash]);
+        
+        //genero el token para el usuario, meto su nombre de user en el token y lo cifro con la clave.
+        const accessToken = jwt.sign({ username: nombre}, config.llave_token, {
+            expiresIn: 60 * 60 * 24 // expires in 24 hours
+        });
+
+        //envío al cliente otro JSON, con un msj y el token de autenticación.
+        res.json({
+            message: 'Usuario introducido correctamente',
+            token: accessToken
+        })
+    }
 
 };
 
@@ -108,15 +118,15 @@ const removeUser = async (req,res) => {
 //porque en bd ya hay una que se llama github.
 const addpwtoUser = async (req,res) => {
     //cojo el par user-pass concreto y el dominio (fb,twitter,amazon...)
-    const {usuarioPrincipal,concreteuser,concretepasswd,dominio,fechacreacion,fechacaducidad,nombre,categoria} = req.body;
+    const {concreteuser,concretepasswd,dominio,fechacreacion,fechacaducidad,nombre,categoria} = req.body;
     const tipo = "usuario-passwd"
     const fichero = "NULL"
+    //cojo el nombre de usuario del token que me han pasado
+    const usuarioPrincipal = req.usuario;
 
     //miro si ya existe un par usuario-passwd con mismo nombre que el que quiere el usuario
     const aux = await conexion.query('select nombre from contrasenya where (email=$1 and nombre=$2)',[usuarioPrincipal,nombre]);
 
-    console.log(aux.rows);
-    
     //se puede añadir
     if (aux.rows==0) {
         //ciframos la contraseña con un cifrado simétrico (para poderla recuperar luegoo)
@@ -134,15 +144,13 @@ const addpwtoUser = async (req,res) => {
     
         //envío al cliente otro JSON, con un msj y el user creado.
         res.json({
-            message: 'Contraseña introducida correctamente',
+            message: 'Contraseña introducida correctamente'
         })
-        //saco por pantalla el resultado del INSERT
-        console.log("contraseña añadida al usuario");
     }
     else {
         //ya hay una contraseña para él con ese nombre
-        res.json({
-            message: 'Ya tiene una contraseña con ese nombre',
+        res.status(404).json({
+            message: 'Ya tiene una contraseña con ese nombre'
         })
     }
 };
@@ -150,8 +158,8 @@ const addpwtoUser = async (req,res) => {
 //obtengo todas las contraseñas del usuario X
 //le doy al front solamente el nombre de la contraseña y el dominio
 const getPasswdsUser = async (req,res) => {
-    //cojo el par user-pass concreto y el dominio (fb,twitter,amazon...)
-    const {usuarioPrincipal} = req.body;
+    //cojo nombre del usuario del token que me pasa.
+    const usuarioPrincipal = req.usuario;
 
     //pregunto por las passwds de este usuario
     const resp = 
@@ -159,14 +167,12 @@ const getPasswdsUser = async (req,res) => {
     
     //envío al cliente otro JSON, con un msj y el user creado.
     res.status(200).json(resp.rows);
-    console.log(resp.rows);
-    //saco por pantalla el resultado del INSERT
-    console.log("\nSacamos contraseñas del usuario");
-
 };
 
-//verifico que el usuario X esté en Base de datos
-//AQUÍ TENDRÍA QUE MANDARLE A FRONT EL JWT DEL USUARIO X
+
+//si usuario está en BD -> le mando token
+//si ha puesto mal la passwd (pero el email existe) -> le mando error (passwd incorrecta)
+//si ni siquiera existe el mail -> le mando error y que se registre o algo
 const verifyUser = async (req,res) => {
     //cojo el usuario y su pass
     const {nombre, password} = req.body;
@@ -177,7 +183,7 @@ const verifyUser = async (req,res) => {
     //si no has podido seleccionar ninguna row (no hay user con ese nombre)...
     if (resp1.rowCount==0) {
         //el usuario ni está en bd porque no lo encuentro en bd
-        res.json({
+        res.status(404).json({
             message: 'User not in DB',
             codigo: '0'
         })
@@ -186,15 +192,20 @@ const verifyUser = async (req,res) => {
         //comparo con esta funcioncita la password que me envían del front
         //(con la que el user quiere hacer log in) con la que tiene ese user en bd
         if (bcrypt.compareSync(password, resp1.rows[0].password)) {
-            // Passwords match
+            // Passwords match, generate JWT and send info to user.
+            const accessToken = jwt.sign({ username: nombre}, config.llave_token, {
+                expiresIn: 60 * 60 * 24 // expires in 24 hours
+            });
+
             res.json({
                 message: 'User OK',
-                codigo: '1'
+                codigo: '1',
+                token: accessToken
             })
         } 
         else {
             // Passwords don't match
-            res.json({
+            res.status(404).json({
                 message: 'Password NOT OK',
                 codigo: '0'
             })
@@ -206,59 +217,67 @@ const verifyUser = async (req,res) => {
 
 //saca los detalles de la contraseña en específico (par,fichero ó imagen)
 const detailsPasswd = async (req,res) => {
-    //me pasan el nombre de la contraseña del usuario
-    const {nombreUsuario, nombrePassword} = req.body;
+    //nombre de la contraseña en específico
+    const {nombrePassword} = req.body;
+    //nombre del usuario que ha creado la contraseña. Lo saco del token.
+    const nombreUsuario = req.usuario;
     //selecciono el tipo de contraseña que es
     const resp1 = await conexion.query('SELECT tipo from contrasenya where (email=$1 and nombre=$2)',[nombreUsuario,nombrePassword]);
+    
     // ** COMPROBAR ANTES QUE TENGA UNA QUE SE LLAME ASÍ **
-    // if resp1.rowCount es 0 --> json: ERROR
-    //cogemos el tipo de contraseña que es
-    var tipo = resp1.rows[0].tipo;
+    if (resp1.rowCount==0) {
+        res.status(404).json({
+            message: 'No password with that name'
+        })
+    }
+    else {
+        //cogemos el tipo de contraseña que es
+        var tipo = resp1.rows[0].tipo;
 
-    switch(tipo) {
-        case "usuario-passwd":
-            //me quedo con los detalles que me interesan de este tipo de contraseña
-            const resp2 = await conexion.query('SELECT concreteuser,concretepasswd,dominio,categoria,fechacreacion,fechacaducidad from contrasenya where (email=$1 and nombre=$2)',[nombreUsuario,nombrePassword]);
-            //antes de enviar a front, debo descifrar la contraseña
-            var passCifrada = resp2.rows[0].concretepasswd;
-            console.log("PasswordCifrada : " + passCifrada);
+        switch(tipo) {
+            case "usuario-passwd":
+                //me quedo con los detalles que me interesan de este tipo de contraseña
+                const resp2 = await conexion.query('SELECT concreteuser,concretepasswd,dominio,categoria,fechacreacion,fechacaducidad from contrasenya where (email=$1 and nombre=$2)',[nombreUsuario,nombrePassword]);
+                //antes de enviar a front, debo descifrar la contraseña
+                var passCifrada = resp2.rows[0].concretepasswd;
 
-            //var auxIV = passCifrada.substr(0, 32);
-            //auxIV = auxIV.toString('hex');
+                //var auxIV = passCifrada.substr(0, 32);
+                //auxIV = auxIV.toString('hex');
 
-            //var auxC = passCifrada.substr(32, 64);
-            //auxC = auxC.toString('hex');            
+                //var auxC = passCifrada.substr(32, 64);
+                //auxC = auxC.toString('hex');            
 
-            //creamos el JSON para pasarselo al método decrypt con el iv y content (32 bits y 32 bits) que he cogido de la pass
-            //var passwordJson = {
-            //    iv: auxIV,
-            //    content: auxC
-            //};
-            //console.log("JSON: " + passwordJson.iv + ", " + passwordJson.content);
+                //creamos el JSON para pasarselo al método decrypt con el iv y content (32 bits y 32 bits) que he cogido de la pass
+                //var passwordJson = {
+                //    iv: auxIV,
+                //    content: auxC
+                //};
+                //console.log("JSON: " + passwordJson.iv + ", " + passwordJson.content);
+                
+                //descifro la contraseña que he almacenado en BD
+                const plainTextPasswd = cryptr.decrypt(passCifrada);
+                //actualizo el campo de la passwd con lo que me ha salido y envío a front
+                var respuesta = {
+                    concreteuser : resp2.rows[0].concreteuser,
+                    concretpasswd : plainTextPasswd,
+                    dominio : resp2.rows[0].dominio,
+                    categoria : resp2.rows[0].categoria,
+                    fechacreacion : resp2.rows[0].fechacreacion,
+                    fechacaducidad : resp2.rows[0].fechacaducidad
+                };
+                //enviamos
+                res.send(respuesta);
+            break;
             
-            //descifro la contraseña que he almacenado en BD
-            const plainTextPasswd = cryptr.decrypt(passCifrada);
-            //actualizo el campo de la passwd con lo que me ha salido y envío a front
-            var respuesta = {
-                concreteuser : resp2.rows[0].concreteuser,
-                concretpasswd : plainTextPasswd,
-                dominio : resp2.rows[0].dominio,
-                categoria : resp2.rows[0].categoria,
-                fechacreacion : resp2.rows[0].fechacreacion,
-                fechacaducidad : resp2.rows[0].fechacaducidad
-            };
-            //enviamos
-            res.send(respuesta);
-        break;
-        
-        case "fichero":
-            res.send("ficherito - no implementado aun");
-        break;
+            case "fichero":
+                res.send("ficherito - no implementado aun");
+            break;
 
-        case "imagen":
-            res.send("imagen - no implementado aun");
-        break;
+            case "imagen":
+                res.send("imagen - no implementado aun");
+            break;
 
+        }
     }
     
 };
