@@ -129,6 +129,23 @@ const userRemove = async (req,res) => {
     }
 };
 
+//CHANGE PASSWD
+const userChangePw = async (req,res) => {
+    //cojo la nueva pw que quiere el user
+    const {password} = req.body;
+    //cojo el nombre de usuario del token que me han pasado
+    const usuarioPrincipal = req.usuario;
+    //no compruebo q esta en BD pq al tener token, se ha tenido que loguear -> está en BD 100%
+    //cambiamos la pass
+    let hash = bcrypt.hashSync(password, saltRounds);
+    //inserto el usuario junto a su contraseña cifrada en la base de datos
+    const resp = await conexion.query('UPDATE usuarios SET password=$1 where (nombre=$2)', [hash,usuarioPrincipal]);
+    //respondo que ya se ha insertado al user.
+    res.json({
+        message: 'Password changed correctly'
+    })
+};
+
 // -------------- PASSWORDS --------------
 
 //solamente añade un simple par usuario-contraseña asociado a un user.
@@ -356,6 +373,22 @@ const deleteCat = async (req,res) => {
     }
 };
 
+//obtiene las contraseñas asociadas a la categoria x del usuario. 
+const filterCat = async (req,res) => {
+    //cojo nombre del usuario del token que me pasa.
+    const usuarioPrincipal = req.usuario;
+    //cojo el nombre de la categoria que pasan como QUERY paramter.
+    let nombrecategoria = req.query.nombrecategoria;
+    //miro si tiene una categoria con ese nombre
+
+    console.log(usuarioPrincipal + " " + nombrecategoria);
+    const resp = 
+    await conexion.query('SELECT nombre,tipo from contrasenya where (email=$1 AND categoria=$2)',[usuarioPrincipal,nombrecategoria]);
+    console.log(resp);
+    //envío al cliente el JSON con las passwds que tiene ese user
+    res.status(200).json(resp.rows);
+};
+
 
 //aquí simplemente digo que exporto las funciones aquí definidas para que
 //se puedan usar en el módulo de index.js (routes)
@@ -370,5 +403,7 @@ module.exports = {
     addCat,
     getCat,
     addCatToPasswd,
-    deleteCat
+    deleteCat,
+    filterCat,
+    userChangePw
 }
