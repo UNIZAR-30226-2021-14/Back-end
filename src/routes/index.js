@@ -7,8 +7,8 @@ const jwt = require('jsonwebtoken');
 const config = require('../../env/config');
 
 //cojo la función de getUsers del fichero controllers.
-const {userLogin, userSignin, userRemove, pruebilla, addpwtoUser, getPasswdsUser,detailsPasswd,addCat,addCatToPasswd,getCat,deleteCat} = 
-    require('../controllers/index_controllers_users');
+const {userLogin, userSignin, userRemove, userChangePw, pruebilla, addpwtoUser, getPasswdsUser,detailsPasswd,addCat,
+    addCatToPasswd,getCat,deleteCat,filterCat} = require('../controllers/index_controllers_users');
 
 //middleware para comprobar token
 /*function rutasProtegidas(req, res, next) {
@@ -69,8 +69,8 @@ router.get('/', (req, res) => {
 //la función de autenticación rutasProtegidas (valida token)
 router.get('/prueba',rutasProtegidas,pruebilla);   
 
-// -------------- USERS --------------
 
+// -------------- USERS --------------
 //LOGIN. 
 router.post('/login',userLogin);  
 
@@ -80,9 +80,12 @@ router.post('/signin',userSignin);
 //DELETE ACCOUNT.
 router.delete('/removeAccount',rutasProtegidas,userRemove);
 
+//CHANGE PASSWORD. (cambia la pw una vez logueado)
+router.post('/changepw',rutasProtegidas,userChangePw);
+
+
 
 // -------------- PASSWORDS --------------
-
 //almacenamos una contraseña para un usuario
 router.post('/passwd',rutasProtegidas,addpwtoUser);
 
@@ -91,6 +94,7 @@ router.get('/passwdUser',rutasProtegidas,getPasswdsUser);
 
 //sacamos los detalles de una contraseña 
 router.get('/detailspasswd',rutasProtegidas,detailsPasswd);
+
 
 
 // -------------- CATEGORIES --------------
@@ -105,6 +109,9 @@ router.get('/getcat',rutasProtegidas,getCat);
 
 //obtenemos las contraseñas del usuario
 router.delete('/deletecat',rutasProtegidas,deleteCat);
+
+//filtramos por categoria en específico
+router.get('/filtercat',rutasProtegidas,filterCat);
 
 
 module.exports = router;
