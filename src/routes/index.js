@@ -7,8 +7,8 @@ const jwt = require('jsonwebtoken');
 const config = require('../../env/config');
 
 //cojo la función de getUsers del fichero controllers.
-const { getUsers, addUser, removeUser, pruebilla, addpwtoUser, getPasswdsUser, verifyUser,detailsPasswd} = 
-    require('../controllers/index_controllers_user');
+const {userLogin, userSignin, userRemove, pruebilla, addpwtoUser, getPasswdsUser,detailsPasswd,addCat,addCatToPasswd,getCat,deleteCat} = 
+    require('../controllers/index_controllers_users');
 
 //middleware para comprobar token
 /*function rutasProtegidas(req, res, next) {
@@ -36,6 +36,7 @@ const { getUsers, addUser, removeUser, pruebilla, addpwtoUser, getPasswdsUser, v
     }
 };*/
 
+//MIDDLEWARE.
 const rutasProtegidas = (req, res, next) => {
     //cojo la cabecera authorization, donde está el el token
     const authHeader = req.headers.authorization;
@@ -58,30 +59,52 @@ const rutasProtegidas = (req, res, next) => {
     }
 };
 
+//página de inicio (nadie va a hacer get aquí)
+router.get('/', (req, res) => {
+    res.send('Fresh tech API running...');
+})
+
 //pequeña prueba
 //se ejecutará la función pruebilla despues de haberse ejecutado
 //la función de autenticación rutasProtegidas (valida token)
-router.get('/prueba',rutasProtegidas,pruebilla);
+router.get('/prueba',rutasProtegidas,pruebilla);   
 
-//get sirve para coger datos, coger usuarios. 
-router.get('/users',getUsers);
+// -------------- USERS --------------
 
-//si en el front hay registro -> petición a esta ruta !!! 
-router.post('/users',addUser);
+//LOGIN. 
+router.post('/login',userLogin);  
 
-//delete es para eliminar datos
-router.delete('/users',removeUser);
+//SIGNIN.
+router.post('/signin',userSignin);  
+
+//DELETE ACCOUNT.
+router.delete('/removeAccount',rutasProtegidas,userRemove);
+
+
+// -------------- PASSWORDS --------------
 
 //almacenamos una contraseña para un usuario
-router.post('/passwd',rutasProtegidas,addpwtoUser)
+router.post('/passwd',rutasProtegidas,addpwtoUser);
 
 //sacamos el nombre de todas las contraseñas asociadas a un usuario en concreto 
-router.get('/passwdUser',rutasProtegidas,getPasswdsUser)
-
-//si en el front hay inicio de sesión -> petición a esta ruta !!!
-router.get('/verify', verifyUser);
+router.get('/passwdUser',rutasProtegidas,getPasswdsUser);
 
 //sacamos los detalles de una contraseña 
-router.get('/detailspasswd',rutasProtegidas,detailsPasswd)
+router.get('/detailspasswd',rutasProtegidas,detailsPasswd);
+
+
+// -------------- CATEGORIES --------------
+//almacenamos una categoria para un usuario
+router.post('/addcat',rutasProtegidas,addCat);
+
+//asignarle a una contraseña una categoria ya creada por el user
+router.post('/catpasswd',rutasProtegidas,addCatToPasswd);
+
+//obtenemos las contraseñas del usuario
+router.get('/getcat',rutasProtegidas,getCat);
+
+//obtenemos las contraseñas del usuario
+router.delete('/deletecat',rutasProtegidas,deleteCat);
+
 
 module.exports = router;
