@@ -195,10 +195,47 @@ const addpwtoUser = async (req,res) => {
 const getPasswdsUser = async (req,res) => {
     //cojo nombre del usuario del token que me pasa.
     const usuarioPrincipal = req.usuario;
+    //cojo los parametros de ordenacion que me pasan en la QUERY
+    let ordenarPor = req.query.ordenarPor;  //nombre, fechacreacion ó fechacaducidad
+    let ordenarDe = req.query.ordenarDe;    //ASC o DESC
 
-    //pregunto por las passwds de este usuario
-    const resp = 
-    await conexion.query('SELECT dominio,nombre from contrasenya where email=$1',[usuarioPrincipal]);
+    //NO DEJA USAR ORDER BY $1. Hay que hacerlo manualmente.
+    var resp;
+    switch(ordenarPor) {
+        case "nombre":
+            if (ordenarDe=="ASC") {
+                resp = 
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad from contrasenya where email=$1 ORDER BY nombre ASC',[usuarioPrincipal]);
+            }
+            else {
+                resp = 
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad from contrasenya where email=$1 ORDER BY nombre DESC',[usuarioPrincipal]);
+            }
+        break;
+
+        case "fechacreacion":
+            if (ordenarDe=="ASC") {
+                resp = 
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad from contrasenya where email=$1 ORDER BY fechacreacion ASC',[usuarioPrincipal]);
+            }
+            else {
+                resp = 
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad from contrasenya where email=$1 ORDER BY fechacreacion DESC',[usuarioPrincipal]);
+            }
+        break;
+    
+        case "fechacaducidad":
+            if (ordenarDe=="ASC") {
+                resp = 
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad from contrasenya where email=$1 ORDER BY fechacaducidad ASC',[usuarioPrincipal]);
+            }
+            else {
+                resp = 
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad from contrasenya where email=$1 ORDER BY fechacaducidad DESC',[usuarioPrincipal]);
+            }
+        break;
+
+    }
     
     //envío al cliente el JSON con las passwds que tiene ese user
     res.status(200).json(resp.rows);
@@ -289,7 +326,7 @@ const addCat = async (req,res) => {
         const resp = 
         await conexion.query('INSERT INTO categorias (nombrecat,mail) VALUES ($1,$2)',[nombrecategoria,usuarioPrincipal]);
 
-        res.status(404).json({
+        res.status(200).json({
             message: 'Category created'
         })
     }
@@ -337,7 +374,7 @@ const addCatToPasswd = async (req,res) => {
         const resp = 
         await conexion.query('UPDATE contrasenya SET categoria=$1 where (nombre=$2 AND email=$3)',[nombrecategoria,nombrePassword,usuarioPrincipal]);
 
-        res.status(404).json({
+        res.status(200).json({
             message: 'Password´s category updated correctly'
         })
     }
@@ -379,7 +416,8 @@ const filterCat = async (req,res) => {
     const usuarioPrincipal = req.usuario;
     //cojo el nombre de la categoria que pasan como QUERY paramter.
     let nombrecategoria = req.query.nombrecategoria;
-    //miro si tiene una categoria con ese nombre
+    //** no miro si tiene una categoria con ese nombre ** (me fio de front que 
+    //le de para seleccionar solo entre las que el user tenga)
 
     console.log(usuarioPrincipal + " " + nombrecategoria);
     const resp = 
