@@ -236,8 +236,6 @@ const getPasswdsUser = async (req,res) => {
         break;
 
     }
-    
-    //envío al cliente el JSON con las passwds que tiene ese user
     res.status(200).json(resp.rows);
 };
 
