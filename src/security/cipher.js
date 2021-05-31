@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const algorithm = 'aes-256-ctr';
-let key = '%C*F-JaNcRfUjXn2r5u8x/A?D(G+KbPe';
-key = crypto.createHash('sha256').update(String(key)).digest('base64').substr(0, 32);
+
+let key = crypto.createHash('sha256').update(String(key)).digest('base64').substr(0, 32);
 
 const encryptFile = (buffer) => {
     // Create an initialization vector
