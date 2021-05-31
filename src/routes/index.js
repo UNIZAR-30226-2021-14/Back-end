@@ -7,8 +7,8 @@ const jwt = require('jsonwebtoken');
 const config = require('../../env/config');
 
 //cojo la función de getUsers del fichero controllers.
-const {userLogin, userSignin, userRemove, userChangePw, pruebilla, addpwtoUser, getPasswdsUser,detailsPasswd,addCat,
-    addCatToPasswd,getCat,deleteCat,filterCat} = require('../controllers/index_controllers_users');
+const {userLogin, userSignin, userRemove, userChangePw, pruebilla, addpwtoUser, deletepasswd, getPasswdsUser,detailsPasswd, editpasswd,
+    addCat,addCatToPasswd,getCat,deleteCat,filterCat,addPic,deletePic,getPic,editPic,aux,getPicWeb,addFile,editCat,getFile,editFile} = require('../controllers/index_controllers_users');
 
 //middleware para comprobar token
 /*function rutasProtegidas(req, res, next) {
@@ -69,8 +69,8 @@ router.get('/', (req, res) => {
 //la función de autenticación rutasProtegidas (valida token)
 router.get('/prueba',rutasProtegidas,pruebilla);   
 
-
 // -------------- USERS --------------
+
 //LOGIN. 
 router.post('/login',userLogin);  
 
@@ -84,8 +84,8 @@ router.delete('/removeAccount',rutasProtegidas,userRemove);
 router.post('/changepw',rutasProtegidas,userChangePw);
 
 
-
 // -------------- PASSWORDS --------------
+
 //almacenamos una contraseña para un usuario
 router.post('/passwd',rutasProtegidas,addpwtoUser);
 
@@ -95,9 +95,15 @@ router.get('/passwdUser',rutasProtegidas,getPasswdsUser);
 //sacamos los detalles de una contraseña 
 router.get('/detailspasswd',rutasProtegidas,detailsPasswd);
 
+//eliminar una contraseña
+router.delete('/deletepasswd',rutasProtegidas,deletepasswd);
+
+//editar una contraseña
+router.post('/editpasswd',rutasProtegidas,editpasswd);
 
 
 // -------------- CATEGORIES --------------
+
 //almacenamos una categoria para un usuario
 router.post('/addcat',rutasProtegidas,addCat);
 
@@ -113,5 +119,54 @@ router.delete('/deletecat',rutasProtegidas,deleteCat);
 //filtramos por categoria en específico
 router.get('/filtercat',rutasProtegidas,filterCat);
 
+// -------------- IMÁGENES --------------
+const multer = require('multer');
+const path = require('path');
+const diskstorage = multer.diskStorage ({
+    destination: path.join(__dirname, '../images'),
+    filename : (req,file,cb) => {
+        //forma en la que se guarda la imagen (nombre)
+        cb(null, Date.now() + '-' + file.originalname)
+    }
+})
+
+// single('image') es importante. pongo 'image' porq es el nombre que pone
+// el front al hacer el formdata.append('image',file)
+const fileUpload = multer({
+    storage:diskstorage
+}).single('image');
+
+router.post('/addPic',rutasProtegidas,fileUpload,addPic);
+
+router.get('/getPic',rutasProtegidas,getPic);
+
+router.delete('/deletePic',rutasProtegidas,deletePic);
+
+router.post('/editPic',rutasProtegidas,fileUpload,editPic);
+
+router.post('/aux',rutasProtegidas,aux);
+
+router.get('/getPicWeb',rutasProtegidas,getPicWeb);
+
+// -------------- FICHEROS --------------
+const diskstorageFile = multer.diskStorage ({
+    destination: path.join(__dirname, '../files'),
+    filename : (req,file,cb) => {
+        //forma en la que se guarda la imagen (nombre)
+        cb(null, Date.now() + '-' + file.originalname)
+    }
+})
+
+const fileUpload2 = multer({
+    storage:diskstorageFile
+}).single('file');
+
+router.post('/addFile',rutasProtegidas,fileUpload2,addFile)
+
+router.post('/editCat',rutasProtegidas,editCat)
+
+router.get('/getFile',rutasProtegidas,fileUpload2,getFile)
+
+router.post('/editFile',rutasProtegidas,fileUpload2,editFile);
 
 module.exports = router;

@@ -13,8 +13,10 @@ const cryptr = new Cryptr('ahsj174693=&%%$DGHSV');
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
 
-//importo las funciones de encriptar y desencriptar
-const {encrypt,decrypt} = require('../security/cipher');
+//importo las funciones de encriptar y desencriptar ficheros (imagenes/ficheros al uso)
+const {encryptFile,decryptFile} = require('../security/cipher')
+const fs = require('fs')
+const path = require('path')
 
 //en este ficherito me defino todas las funciones que necesito.
 //en este caso, aquí podría definir todo lo relacionado con el usuario.
@@ -22,11 +24,11 @@ const { Pool } = require('pg');
 
 //Pool de conexiones a la BD para poder conectarme a psoftBD y coger los datos
 const conexion = new Pool({
-    host: config.HOST,
-    user: config.DB_USER,
-    password: '',
-    database: config.DB_NAME
-  });
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false
+    }
+});
 
 const pruebilla = async (req,res) => {
     //pruebo situacion: usuario manda peticion con token.
@@ -37,7 +39,7 @@ const pruebilla = async (req,res) => {
     //en la funcion de middleware, he dejado en req.usuario el mail de la persona
     //que me ha enviado el token. Lo cojo.
     res.send(req.usuario);
-    
+
 };
 
 // -------------- USERS --------------
@@ -71,7 +73,7 @@ const userLogin = async (req,res) => {
                 codigo: '1',
                 token: accessToken
             })
-        } 
+        }
         else {
             // Passwords don't match
             res.status(404).json({
@@ -107,14 +109,14 @@ const userSignin = async (req,res) => {
     }
 };
 
-//DELETE ACCOUNT. 
+//DELETE ACCOUNT.
 //Al eliminarse, se eliminan tb sus contraseñas (por el DELETE on CASCADE)
 const userRemove = async (req,res) => {
     //me pasan el JSON del usuario, me quedo con su nombre (clave primaria)
     const usuarioPrincipal = req.usuario;
     //elimino al usuario en cuestión
     const resp = await conexion.query('DELETE FROM usuarios WHERE nombre=$1', [usuarioPrincipal]);
-    
+
     //si resp.rowCount es cero es que no ha deleteado ninguna row (el user no existe)
     if (resp.rowCount==0) {
         res.status(404).json({
@@ -146,6 +148,7 @@ const userChangePw = async (req,res) => {
     })
 };
 
+
 // -------------- PASSWORDS --------------
 
 //solamente añade un simple par usuario-contraseña asociado a un user.
@@ -166,17 +169,17 @@ const addpwtoUser = async (req,res) => {
     if (aux.rows==0) {
         //ciframos la contraseña con un cifrado simétrico (para poderla recuperar luegoo)
         //var encrypted_passwd = encrypt(concretepasswd);
-        
+
         //concateno el iv y el contenido y para almacenarlo en BD
-        //encrypted_passwd = encrypted_passwd.iv + encrypted_passwd.content; 
+        //encrypted_passwd = encrypted_passwd.iv + encrypted_passwd.content;
 
         const encrypted_passwd = cryptr.encrypt(concretepasswd);
 
         //inserto en la BD el nombre y la pw del usuario que me han pasado
-        const resp = 
-        await conexion.query('INSERT INTO contrasenya (email,tipo,concreteuser,concretepasswd,dominio,fichero,categoria,fechacreacion,fechacaducidad,nombre) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', 
+        const resp =
+        await conexion.query('INSERT INTO contrasenya (email,tipo,concreteuser,concretepasswd,dominio,fichero,categoria,fechacreacion,fechacaducidad,nombre) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
             [usuarioPrincipal,tipo,concreteuser,encrypted_passwd,dominio,fichero,categoria,fechacreacion,fechacaducidad,nombre]);
-    
+
         //envío al cliente otro JSON, con un msj y el user creado.
         res.status(200).json({
             message: 'Contraseña introducida correctamente'
@@ -198,40 +201,52 @@ const getPasswdsUser = async (req,res) => {
     //cojo los parametros de ordenacion que me pasan en la QUERY
     let ordenarPor = req.query.ordenarPor;  //nombre, fechacreacion ó fechacaducidad
     let ordenarDe = req.query.ordenarDe;    //ASC o DESC
+    //let elemento = req.query.elemento;      //¿Qué quiere front que le pase?
 
     //NO DEJA USAR ORDER BY $1. Hay que hacerlo manualmente.
     var resp;
     switch(ordenarPor) {
         case "nombre":
             if (ordenarDe=="ASC") {
-                resp = 
-                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad from contrasenya where email=$1 ORDER BY nombre ASC',[usuarioPrincipal]);
+                resp =
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 ORDER BY nombre ASC',[usuarioPrincipal]);
             }
             else {
-                resp = 
-                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad from contrasenya where email=$1 ORDER BY nombre DESC',[usuarioPrincipal]);
+                resp =
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 ORDER BY nombre DESC',[usuarioPrincipal]);
             }
         break;
 
         case "fechacreacion":
             if (ordenarDe=="ASC") {
-                resp = 
-                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad from contrasenya where email=$1 ORDER BY fechacreacion ASC',[usuarioPrincipal]);
+                resp =
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 ORDER BY fechacreacion ASC',[usuarioPrincipal]);
             }
             else {
-                resp = 
-                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad from contrasenya where email=$1 ORDER BY fechacreacion DESC',[usuarioPrincipal]);
+                resp =
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 ORDER BY fechacreacion DESC',[usuarioPrincipal]);
             }
         break;
-    
+
         case "fechacaducidad":
             if (ordenarDe=="ASC") {
-                resp = 
-                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad from contrasenya where email=$1 ORDER BY fechacaducidad ASC',[usuarioPrincipal]);
+                resp =
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 ORDER BY fechacaducidad ASC',[usuarioPrincipal]);
             }
             else {
-                resp = 
-                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad from contrasenya where email=$1 ORDER BY fechacaducidad DESC',[usuarioPrincipal]);
+                resp =
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 ORDER BY fechacaducidad DESC',[usuarioPrincipal]);
+            }
+        break;
+
+        case "categoria":
+            if (ordenarDe=="ASC") {
+                resp =
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 ORDER BY categoria ASC',[usuarioPrincipal]);
+            }
+            else {
+                resp =
+                await conexion.query('SELECT dominio,nombre,tipo,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 ORDER BY categoria DESC',[usuarioPrincipal]);
             }
         break;
 
@@ -247,8 +262,8 @@ const detailsPasswd = async (req,res) => {
     const nombreUsuario = req.usuario;
     //selecciono el tipo de contraseña que es
     const resp1 = await conexion.query('SELECT tipo from contrasenya where (email=$1 and nombre=$2)',[nombreUsuario,nombrePassword]);
-    
-    
+
+
     // ** COMPROBAR ANTES QUE TENGA UNA QUE SE LLAME ASÍ **
     if (resp1.rowCount==0) {
         res.status(404).json({
@@ -270,7 +285,7 @@ const detailsPasswd = async (req,res) => {
                 //auxIV = auxIV.toString('hex');
 
                 //var auxC = passCifrada.substr(32, 64);
-                //auxC = auxC.toString('hex');            
+                //auxC = auxC.toString('hex');
 
                 //creamos el JSON para pasarselo al método decrypt con el iv y content (32 bits y 32 bits) que he cogido de la pass
                 //var passwordJson = {
@@ -278,7 +293,7 @@ const detailsPasswd = async (req,res) => {
                 //    content: auxC
                 //};
                 //console.log("JSON: " + passwordJson.iv + ", " + passwordJson.content);
-                
+
                 //descifro la contraseña que he almacenado en BD
                 const plainTextPasswd = cryptr.decrypt(passCifrada);
                 //actualizo el campo de la passwd con lo que me ha salido y envío a front
@@ -293,7 +308,7 @@ const detailsPasswd = async (req,res) => {
                 //enviamos
                 res.send(respuesta);
             break;
-            
+
             case "fichero":
                 res.send("ficherito - no implementado aun");
             break;
@@ -304,11 +319,74 @@ const detailsPasswd = async (req,res) => {
 
         }
     }
-    
+
+};
+
+//elimina la contraseña con el nombre que sea
+const deletepasswd = async (req,res) => {
+    //cojo el nombre de la password solicitada
+    const {nombre} = req.body;
+    //cojo el nombre de usuario del token que me han pasado
+    const usuarioPrincipal = req.usuario;
+
+    //miro si ya existe un par usuario-passwd con mismo nombre que el que quiere el usuario
+    const aux = await conexion.query('select nombre from contrasenya where (email=$1 and nombre=$2)',[usuarioPrincipal,nombre]);
+
+    //hay contraseña para el usuario
+    if (aux.rows!=0) {
+        //elimino de BD la contraseña en cuestión
+        const resp =
+        await conexion.query('DELETE FROM contrasenya where (email=$1 and nombre=$2)',[usuarioPrincipal,nombre]);
+
+        //envío al cliente otro JSON, con un msj y el user creado.
+        res.status(200).json({
+            message: 'Contraseña eliminada correctamente'
+        })
+    }
+    else {
+        //no hay contraseña con ese nombre
+        res.status(404).json({
+            message: 'No hay contraseña con ese nombre'
+        })
+    }
+};
+
+//elimina la contraseña con el nombre que sea
+const editpasswd = async (req,res) => {
+    //cojo el nombre de la password solicitada
+    const {nombrePassword,concreteuser,concretepasswd,dominio,categoria,fechacreacion,fechacaducidad,nombre} = req.body;
+    //cojo el nombre de usuario del token que me han pasado
+    const usuarioPrincipal = req.usuario;
+
+    //comprobamos que no tiene una con ese nombre
+    //comprobamos si ya tiene una contra con ese nombre
+    const aux = await conexion.query('select nombre from contrasenya where (email=$1 and nombre=$2)',[usuarioPrincipal,nombre]);
+
+    if (aux.rows==0 || nombrePassword==nombre) {
+        //no hay, la añado
+        //ciframos la passwd
+        const encrypted_passwd = cryptr.encrypt(concretepasswd);
+
+        //hago el UPDATE
+        const aux = await conexion.query('UPDATE contrasenya SET concreteuser=$1,concretepasswd=$2,dominio=$3,categoria=$4,fechacreacion=$5,fechacaducidad=$6,nombre=$7 where nombre=$8',
+        [concreteuser,encrypted_passwd,dominio,categoria,fechacreacion,fechacaducidad,nombre,nombrePassword]);
+
+        res.status(200).json({
+            message: 'Contraseña editada correctamente!!'
+        })
+
+    }
+    else {
+        res.status(404).json({
+            message: 'Ya tiene una contraseña con ese nombre'
+        })
+    }
+
 };
 
 
 // -------------- CATEGORIES --------------
+
 //crea una categoria asociada al usuario en cuestion.
 const addCat = async (req,res) => {
     //cojo nombre del usuario del token que me pasa.
@@ -316,12 +394,12 @@ const addCat = async (req,res) => {
     const {nombrecategoria} = req.body;
 
     //miro si tiene una categoria con ese nombre
-    const resp = 
+    const resp =
     await conexion.query('SELECT * from categorias where (mail=$1 AND nombrecat=$2)',[usuarioPrincipal,nombrecategoria]);
 
     if (resp.rowCount==0) {
         //puedo crearla
-        const resp = 
+        const resp =
         await conexion.query('INSERT INTO categorias (nombrecat,mail) VALUES ($1,$2)',[nombrecategoria,usuarioPrincipal]);
 
         res.status(200).json({
@@ -336,12 +414,12 @@ const addCat = async (req,res) => {
     }
 };
 
-//obtiene las categorias del usuario en cuestion. 
+//obtiene las categorias del usuario en cuestion.
 const getCat = async (req,res) => {
     //cojo nombre del usuario del token que me pasa.
     const usuarioPrincipal = req.usuario;
     //miro si tiene una categoria con ese nombre
-    const resp = 
+    const resp =
     await conexion.query('SELECT nombrecat from categorias where (mail=$1)',[usuarioPrincipal]);
     //envío resultado a cliente
     res.status(200).json(resp.rows);
@@ -355,7 +433,7 @@ const addCatToPasswd = async (req,res) => {
     const {nombrecategoria,nombrePassword} = req.body;
 
     //miro si tiene una categoria con ese nombre
-    const resp = 
+    const resp =
     await conexion.query('SELECT * from categorias where (mail=$1 AND nombrecat=$2)',[usuarioPrincipal,nombrecategoria]);
 
     if (resp.rowCount==0) {
@@ -363,29 +441,34 @@ const addCatToPasswd = async (req,res) => {
         res.status(404).json({
             message: 'no existe categoria con ese nombre para ese user'
         })
-        
+
     }
     else {
         //puedo asignarla
-        //del nombre de la contraseña que me pasen me fío, es decir, no compruebo que el user
-        //tenga una contraseña con ese nombre.
-        const resp = 
+        //del nombre de la contraseña que me pasen me fío, pero compruebo aun así.
+        const resp =
         await conexion.query('UPDATE contrasenya SET categoria=$1 where (nombre=$2 AND email=$3)',[nombrecategoria,nombrePassword,usuarioPrincipal]);
 
-        res.status(200).json({
-            message: 'Password´s category updated correctly'
-        })
+        if (resp.rowCount>0)
+            res.status(200).json({
+                message: 'Password´s category updated correctly'
+            })
+        else {
+            res.status(404).json({
+                message: 'No password with that name for the user'
+            })
+        }
     }
 };
 
-//elimina categoria y obviamente, pone a null el campo "categoria" de las 
-//contraseñas pertenecientes a esa categoria. 
+//elimina categoria y obviamente, pone a null el campo "categoria" de las
+//contraseñas pertenecientes a esa categoria.
 const deleteCat = async (req,res) => {
     //cojo nombre del usuario del token que me pasa.
     const usuarioPrincipal = req.usuario;
     const {nombrecategoria} = req.body;
     //miro si tiene una categoria con ese nombre
-    const resp = 
+    const resp =
     await conexion.query('SELECT * from categorias where (mail=$1 AND nombrecat=$2)',[usuarioPrincipal,nombrecategoria]);
 
     if (resp.rowCount==0) {
@@ -393,38 +476,471 @@ const deleteCat = async (req,res) => {
         res.status(404).json({
             message: 'No category with that name to be deleted'
         })
-        
+
     }
     else {
         //quito la categoria de las contraseñas que la tenian
-        const resp = 
+        const resp =
         await conexion.query('UPDATE contrasenya SET categoria=$1 where (categoria=$2 AND email=$3)',[null,nombrecategoria,usuarioPrincipal]);
         //elimino la categoria para ese user
-        const resp2 = 
+        const resp2 =
         await conexion.query('DELETE from categorias where (mail=$1 AND nombrecat=$2)',[usuarioPrincipal,nombrecategoria]);
-        res.status(404).json({
+        res.status(200).json({
             message: 'Category deleted'
         })
     }
 };
 
-//obtiene las contraseñas asociadas a la categoria x del usuario. 
+//obtiene las contraseñas asociadas a la categoria x del usuario.
 const filterCat = async (req,res) => {
     //cojo nombre del usuario del token que me pasa.
     const usuarioPrincipal = req.usuario;
     //cojo el nombre de la categoria que pasan como QUERY paramter.
     let nombrecategoria = req.query.nombrecategoria;
-    //** no miro si tiene una categoria con ese nombre ** (me fio de front que 
+    //** no miro si tiene una categoria con ese nombre ** (me fio de front que
     //le de para seleccionar solo entre las que el user tenga)
 
     console.log(usuarioPrincipal + " " + nombrecategoria);
-    const resp = 
+    const resp =
     await conexion.query('SELECT nombre,tipo from contrasenya where (email=$1 AND categoria=$2)',[usuarioPrincipal,nombrecategoria]);
     console.log(resp);
     //envío al cliente el JSON con las passwds que tiene ese user
     res.status(200).json(resp.rows);
 };
 
+// -------------- IMÁGENES --------------
+
+//añado una imagen al usuario
+const addPic = async (req,res) => {
+    //cojo nombre del usuario del token que me pasa.
+    const usuarioPrincipal = req.usuario;
+    //el tipo será una imagen
+    const tipo = "imagen";
+    //cojo el resto de atributos que me interesan
+    const {
+        body: {nombre,categoria,fechacreacion,fechacaducidad}
+    }=req;
+
+    console.log(nombre+' '+categoria+' '+fechacreacion+' '+fechacaducidad)
+
+    //comprobamos si ya tiene una imagen con ese nombre
+    const hasFileAlready =
+    await conexion.query('SELECT * FROM contrasenya WHERE (email=$1 and nombre=$2)', [usuarioPrincipal,nombre]);
+
+    if (hasFileAlready.rowCount==0) {
+        //leo los datos del fichero para meterlo en base de datos
+        const fichero = fs.readFileSync(path.join(__dirname, '../images/' + req.file.filename))
+        //cifro los datos del fichero
+        const encrypted_passwd = encryptFile(fichero);
+
+        //hacemos la inserción. QUEDA COMPROBAR QUE NO TENGA ESA IMAGEN YA.
+        const resp =
+        await conexion.query('INSERT INTO contrasenya (email,tipo,fichero,categoria,fechacreacion,fechacaducidad,nombre) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [usuarioPrincipal,tipo,encrypted_passwd,categoria,fechacreacion,fechacaducidad,nombre]);
+
+        // Delete the file like normal
+        fs.unlink(req.file.path, (err) => {
+            if (err) {
+            console.error(err)
+            return
+            }
+            //file removed
+        })
+
+        //respondo a cliente
+        res.json({
+            message : 'ok'
+        })
+    }
+    else {
+        //error. Ya hay una pic con ese nombre
+        res.json({
+            message : 'no ok'
+        })
+    }
+};
+
+//obtengo la imagen de nombre x para el usuario y
+const getPic = async (req,res) => {
+    //cojo nombre del usuario del token que me pasa.
+    const usuarioPrincipal = req.usuario;
+    //cojo el nombre de la imaen que el quiere
+    let nombre = req.query.nombre;
+
+    //seleccionamos la imagen del usuario e intentamos sacar los bytes.
+    const resp = 
+    await conexion.query('SELECT nombre,fichero,categoria,fechacaducidad,fechacreacion FROM contrasenya WHERE (email=$1 and nombre=$2 and tipo=$3)', [usuarioPrincipal,nombre,'imagen']);
+
+    if (resp.rowCount==0) {
+        //ninguna contraseña con ese nombre
+        res.status(404).json({
+            message : 'no ok'
+        })
+    }
+    else {
+        //obtengo el contenido del fichero (cifrado)
+        var ficheroCifrado = resp.rows[0].fichero;
+        //descifro el contenido
+        const ficheroPlano = decryptFile(ficheroCifrado);
+
+        //reconstruyo la pic con los datos para ver si realmente rula
+        fs.writeFileSync(path.join(__dirname, '../../imagesdb/' + resp.rows[0].nombre + '.jpg'), ficheroPlano)
+
+        //respondo a cliente
+        var respuesta = resp.rows[0].nombre+'.jpg'
+        res.status(200).json({
+            nombreImagen : respuesta,
+            categoria : resp.rows[0].categoria,
+            fechacaducidad : resp.rows[0].fechacaducidad,
+            fechacreacion : resp.rows[0].fechacreacion
+        })
+    }
+};
+
+//deleteo una imagen
+const deletePic = async (req,res) => {
+    //cojo nombre del usuario del token que me pasa.
+    const usuarioPrincipal = req.usuario;
+    //cojo el nombre de la imaen que el quiere
+    const {nombre} = req.body;
+
+    //seleccionamos la imagen del usuario e intentamos sacar los bytes.
+    const resp =
+    await conexion.query('SELECT nombre,fichero FROM contrasenya WHERE (email=$1 and nombre=$2 and tipo=$3)', [usuarioPrincipal,nombre,'imagen']);
+
+    if (resp.rowCount==0) {
+        //ninguna contraseña con ese nombre
+        res.status(404).json({
+            message : 'No pic with that name bruh. Chill it.'
+        })
+    }
+    else {
+        const resp =
+        await conexion.query('DELETE FROM contrasenya WHERE (email=$1 and nombre=$2 and tipo=$3)', [usuarioPrincipal,nombre,'imagen']);
+
+        //respondo a cliente
+        res.status(200).json({
+            message:'Pic deleted bruh.'
+        })
+    }
+};
+
+//actualizo una imagen
+const editPic = async (req,res) => {
+    //cojo nombre del usuario del token que me pasa.
+    const usuarioPrincipal = req.usuario;
+    //el tipo será una imagen
+    const tipo = "imagen";
+    //cojo el resto de atributos que me interesan
+    const {
+        body: {nuevoNombre,categoria,fechacreacion,fechacaducidad,nombreAntiguo,actualizaImagen}
+    }=req;
+
+    console.log(nuevoNombre+' '+categoria+' '+fechacreacion+' '+fechacaducidad+' '+nombreAntiguo)
+
+    //comprobamos si ya tiene una imagen con ese nombre
+    const hasFileAlready =
+    await conexion.query('SELECT * FROM contrasenya WHERE (email=$1 and nombre=$2)', [usuarioPrincipal,nuevoNombre]);
+
+    if (hasFileAlready.rowCount==0 || nombreAntiguo==nuevoNombre) {
+        if (actualizaImagen=='si') {
+            //leo los datos del fichero para meterlo en base de datos
+            const fichero = fs.readFileSync(path.join(__dirname, '../images/' + req.file.filename))
+            //cifro los datos del fichero
+            const encrypted_passwd = encryptFile(fichero);
+
+            //hacemos la inserción. QUEDA COMPROBAR QUE NO TENGA ESA IMAGEN YA.
+            const resp =
+            await conexion.query('UPDATE contrasenya SET categoria=$1, fechacreacion=$2, fechacaducidad=$3, fichero=$4, nombre=$5 where (nombre=$6 and email=$7)',
+            [categoria,fechacreacion,fechacaducidad,encrypted_passwd,nuevoNombre,nombreAntiguo,usuarioPrincipal]);
+
+            // Delete the file like normal
+            fs.unlink(req.file.path, (err) => {
+                if (err) {
+                console.error(err)
+                return
+                }
+                //file removed
+            })
+        }
+        else {
+            const resp =
+            await conexion.query('UPDATE contrasenya SET categoria=$1, fechacreacion=$2, fechacaducidad=$3, nombre=$4 where (nombre=$5 and email=$6)',
+            [categoria,fechacreacion,fechacaducidad,nuevoNombre,nombreAntiguo,usuarioPrincipal]);
+        }
+
+        //respondo a cliente
+        res.json({
+            message : 'ok'
+        })
+    }
+    else {
+        //error. Ya hay una pic con ese nombre
+        res.json({
+            message : 'no ok'
+        })
+    }
+};
+
+//metodo auxiliar para saber cuando eliminar foto de la carpeta (NO DE LA BD)
+const aux = async (req,res) => {
+    //cojo nombre del usuario del token que me pasa.
+    const usuarioPrincipal = req.usuario;
+    //cojo el nombre de la imaen que el quiere
+    const {nombreImagen} = req.body;
+    //eliminamos la foto que nos pasa el user
+    const pathToFile = path.join(__dirname, '../../imagesdb/')
+    const pathFinal = path.join(pathToFile,nombreImagen)
+    //unlinkear las imagenes
+    fs.unlink(pathFinal, (err) => {
+        if (err) {
+            console.error(err)
+            res.json({
+                message : 'ok'
+            })
+        }
+        else {
+            console.log("Image deleted succesfully from fs")
+            res.json({
+                message : 'no ok'
+            })
+        }
+        
+    }) 
+};
+
+//método para devolver todas las imágenes al front
+const getPicWeb = async (req,res) => {
+    //cojo nombre del usuario del token que me pasa.
+    const usuarioPrincipal = req.usuario;
+    //cojo los parametros de ordenacion que me pasan en la QUERY
+    let ordenarPor = req.query.ordenarPor;  //nombre, fechacreacion ó fechacaducidad
+    let ordenarDe = req.query.ordenarDe;    //ASC o DESC
+    //let elemento = req.query.elemento;      //¿Qué quiere front que le pase?
+
+    //NO DEJA USAR ORDER BY $1. Hay que hacerlo manualmente.
+    var resp;
+    switch(ordenarPor) {
+        case "nombre":
+            if (ordenarDe=="ASC") {
+                resp =
+                await conexion.query('SELECT nombre,fichero,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 and tipo=$2 ORDER BY nombre ASC',[usuarioPrincipal,'imagen']);
+            }
+            else {
+                resp =
+                await conexion.query('SELECT nombre,fichero,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 and tipo=$2 ORDER BY nombre DESC',[usuarioPrincipal,'imagen']);
+            }
+        break;
+
+        case "fechacreacion":
+            if (ordenarDe=="ASC") {
+                resp =
+                await conexion.query('SELECT nombre,fichero,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 and tipo=$2 ORDER BY fechacreacion ASC',[usuarioPrincipal,'imagen']);
+            }
+            else {
+                resp =
+                await conexion.query('SELECT nombre,fichero,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 and tipo=$2 ORDER BY fechacreacion DESC',[usuarioPrincipal,'imagen']);
+            }
+        break;
+
+        case "fechacaducidad":
+            if (ordenarDe=="ASC") {
+                resp =
+                await conexion.query('SELECT nombre,fichero,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 and tipo=$2 ORDER BY fechacaducidad ASC',[usuarioPrincipal,'imagen']);
+            }
+            else {
+                resp =
+                await conexion.query('SELECT nombre,fichero,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 and tipo=$2 ORDER BY fechacaducidad DESC',[usuarioPrincipal,'imagen']);
+            }
+        break;
+
+        case "categoria":
+            if (ordenarDe=="ASC") {
+                resp =
+                await conexion.query('SELECT nombre,fichero,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 and tipo=$2 ORDER BY categoria ASC',[usuarioPrincipal,'imagen']);
+            }
+            else {
+                resp =
+                await conexion.query('SELECT nombre,fichero,fechacreacion,fechacaducidad,categoria from contrasenya where email=$1 and tipo=$2 ORDER BY categoria DESC',[usuarioPrincipal,'imagen']);
+            }
+        break;
+
+    }
+
+    //reconstruyo la pic con los datos para ver si realmente rula
+    resp.rows.map( fila => {
+        fs.writeFileSync(path.join(__dirname, '../../imagesdb/' + fila.nombre + '.jpg'), decryptFile(fila.fichero))
+    })
+
+    console.log(resp.rows)
+    
+    res.status(200).json(resp.rows);
+    
+};
+
+// -------------- FICHEROS --------------
+
+//añado un ficherito
+const addFile = async (req,res) => {
+    //cojo nombre del usuario del token que me pasa.
+    const usuarioPrincipal = req.usuario;
+    //el tipo será una imagen
+    const tipo = "file";
+    //cojo el resto de atributos que me interesan
+    const {
+        body: {nombre,categoria,fechacreacion,fechacaducidad}
+    }=req;
+
+    console.log(nombre+' '+categoria+' '+fechacreacion+' '+fechacaducidad)
+
+    //comprobamos si ya tiene una imagen con ese nombre
+    const hasFileAlready =
+    await conexion.query('SELECT * FROM contrasenya WHERE (email=$1 and nombre=$2)', [usuarioPrincipal,nombre]);
+
+    if (hasFileAlready.rowCount==0) {
+        //leo los datos del fichero para meterlo en base de datos
+        const fichero = fs.readFileSync(path.join(__dirname, '../files/' + req.file.filename))
+        //cifro los datos del fichero
+        const encrypted_passwd = encryptFile(fichero);
+
+        //hacemos la inserción. QUEDA COMPROBAR QUE NO TENGA ESE FICHERO YA.
+        const resp =
+        await conexion.query('INSERT INTO contrasenya (email,tipo,fichero,categoria,fechacreacion,fechacaducidad,nombre) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [usuarioPrincipal,tipo,encrypted_passwd,categoria,fechacreacion,fechacaducidad,nombre]);
+
+        // Delete the file like normal
+        fs.unlink(req.file.path, (err) => {
+            if (err) {
+            console.error(err)
+            return
+            }
+            //file removed
+        })
+
+        //respondo a cliente
+        res.json({
+            message : 'ok'
+        })
+    }
+    else {
+        //error. Ya hay una pic con ese nombre
+        res.json({
+            message : 'no ok'
+        })
+    }
+};
+
+//cojo un fichero
+const getFile = async (req,res) => {
+    //cojo nombre del usuario del token que me pasa.
+    const usuarioPrincipal = req.usuario;
+    //cojo el nombre de la imaen que el quiere
+    let nombre = req.query.nombre;
+
+    //seleccionamos la imagen del usuario e intentamos sacar los bytes.
+    const resp = 
+    await conexion.query('SELECT nombre,fichero,categoria,fechacaducidad,fechacreacion FROM contrasenya WHERE (email=$1 and nombre=$2 and tipo=$3)', [usuarioPrincipal,nombre,'file']);
+
+    if (resp.rowCount==0) {
+        //ninguna contraseña con ese nombre
+        res.status(404).json({
+            message : 'no ok'
+        })
+    }
+    else {
+        //obtengo el contenido del fichero (cifrado)
+        var ficheroCifrado = resp.rows[0].fichero;
+        //descifro el contenido
+        const ficheroPlano = decryptFile(ficheroCifrado);
+
+        //reconstruyo la pic con los datos para ver si realmente rula
+        fs.writeFileSync(path.join(__dirname, '../../filesdb/' + resp.rows[0].nombre + '.pdf'), ficheroPlano)
+
+        //respondo a cliente
+        var respuesta = resp.rows[0].nombre+'.pdf'
+        res.status(200).json({
+            nombreImagen : respuesta,
+            categoria : resp.rows[0].categoria,
+            fechacaducidad : resp.rows[0].fechacaducidad,
+            fechacreacion : resp.rows[0].fechacreacion
+        })
+    }
+};
+
+//edito un fichero
+const editFile = async (req,res) => {
+    //cojo nombre del usuario del token que me pasa.
+    const usuarioPrincipal = req.usuario;
+    //el tipo será una imagen
+    const tipo = "file";
+    //cojo el resto de atributos que me interesan
+    const {
+        body: {nuevoNombre,categoria,fechacreacion,fechacaducidad,nombreAntiguo,actualizaImagen}
+    }=req;
+
+    console.log(nuevoNombre+' '+categoria+' '+fechacreacion+' '+fechacaducidad+' '+nombreAntiguo)
+
+    //comprobamos si ya tiene una imagen con ese nombre
+    const hasFileAlready =
+    await conexion.query('SELECT * FROM contrasenya WHERE (email=$1 and nombre=$2)', [usuarioPrincipal,nuevoNombre]);
+
+    if (hasFileAlready.rowCount==0 || nombreAntiguo==nuevoNombre) {
+        if (actualizaImagen=='si') {
+            //leo los datos del fichero para meterlo en base de datos
+            const fichero = fs.readFileSync(path.join(__dirname, '../files/' + req.file.filename))
+            //cifro los datos del fichero
+            const encrypted_passwd = encryptFile(fichero);
+
+            //hacemos la inserción. QUEDA COMPROBAR QUE NO TENGA ESA IMAGEN YA.
+            const resp =
+            await conexion.query('UPDATE contrasenya SET categoria=$1, fechacreacion=$2, fechacaducidad=$3, fichero=$4, nombre=$5 where (nombre=$6 and email=$7)',
+            [categoria,fechacreacion,fechacaducidad,encrypted_passwd,nuevoNombre,nombreAntiguo,usuarioPrincipal]);
+
+            // Delete the file like normal
+            fs.unlink(req.file.path, (err) => {
+                if (err) {
+                console.error(err)
+                return
+                }
+                //file removed
+            })
+        }
+        else {
+            const resp =
+            await conexion.query('UPDATE contrasenya SET categoria=$1, fechacreacion=$2, fechacaducidad=$3, nombre=$4 where (nombre=$5 and email=$6)',
+            [categoria,fechacreacion,fechacaducidad,nuevoNombre,nombreAntiguo,usuarioPrincipal]);
+        }
+
+        //respondo a cliente
+        res.json({
+            message : 'ok'
+        })
+    }
+    else {
+        //error. Ya hay una pic con ese nombre
+        res.json({
+            message : 'no ok'
+        })
+    }
+};
+
+//edito una categoría
+const editCat = async (req,res) => {
+    //edito la categoría del usuario X.
+    //todas las contraseñas con tenían esa categoría, ahora tienen la nueva
+    const usuarioPrincipal = req.usuario;
+    const {nomCatAntigua, nomCatNueva} = req.body;
+
+    //actualizamos el nombre de la categoría en la tabla categorías
+    const aux = await conexion.query('UPDATE categorias SET nombrecat=$1 where (mail=$2 and nombrecat=$3)',[nomCatNueva,usuarioPrincipal,nomCatAntigua]);
+    
+    //le cambiamos la categoría a aquellas passwords que la tenían
+    const aux2 = await conexion.query('UPDATE contrasenya SET categoria=$1 where (email=$2 and categoria=$3)',[nomCatNueva,usuarioPrincipal,nomCatAntigua]);
+
+    res.json ({
+        message : 'ok'
+    })
+};
 
 //aquí simplemente digo que exporto las funciones aquí definidas para que
 //se puedan usar en el módulo de index.js (routes)
@@ -432,14 +948,26 @@ module.exports = {
     userLogin,
     userSignin,
     userRemove,
+    userChangePw,
     pruebilla,
     addpwtoUser,
     getPasswdsUser,
     detailsPasswd,
+    deletepasswd,
+    editpasswd,
     addCat,
     getCat,
     addCatToPasswd,
     deleteCat,
     filterCat,
-    userChangePw
+    addPic,
+    getPic,
+    deletePic,
+    editPic,
+    aux,
+    getPicWeb,
+    addFile,
+    editCat,
+    getFile,
+    editFile
 }
